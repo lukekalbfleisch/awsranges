@@ -43,7 +43,7 @@ func (r *Ranges) CheckCIDR(cidr string) (bool, error) {
 	cidrFirstDigit := cidr[0]
 	for _, prefix := range r.Prefixes {
 		if cidrFirstDigit != prefix.IP[0] {
-			return false, nil
+			continue
 		}
 		if prefix.IP == cidr {
 			return true, nil
@@ -54,7 +54,6 @@ func (r *Ranges) CheckCIDR(cidr string) (bool, error) {
 			return true, nil
 		}
 	}
-
 	return false, nil
 }
 
