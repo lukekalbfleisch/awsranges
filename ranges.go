@@ -5,22 +5,20 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-
-	"github.com/hashicorp/go-cleanhttp"
+	"time"
 )
 
-const (
-	url string = "https://ip-ranges.amazonaws.com/ip-ranges.json"
-)
+const url string = "https://ip-ranges.amazonaws.com/ip-ranges.json"
 
-// Prefix contains three strings; IP_Prefix, Region, and Service.
+// Prefix is a representation of given IP prefix, region and service
 type Prefix struct {
 	IP      string `json:"ip_prefix"`
 	Region  string
 	Service string
 }
 
-// Ranges contains two strings, SyncToken and CreateDate, and a slice of Prefixes.
+// Ranges contains the entire list of AWS Prefixes and an HTTP client
+// used to pull data down from AWS
 type Ranges struct {
 	Prefixes []Prefix
 	Client   http.Client
@@ -89,7 +87,7 @@ func (r *Ranges) CheckServices(address string) (*ServicesResponse, error) {
 
 // New returns a new instance of the Ranges object
 func New() (*Ranges, error) {
-	client := cleanhttp.DefaultClient()
+	client := httpClient()
 
 	res, err := client.Get(url)
 	if err != nil {
@@ -109,4 +107,23 @@ func New() (*Ranges, error) {
 	}
 
 	return &ranges, nil
+}
+
+func httpClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			MaxIdleConnsPerHost:   -1,
+			DisableKeepAlives:     true,
+		},
+	}
 }
