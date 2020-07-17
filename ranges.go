@@ -40,8 +40,17 @@ func (r *Ranges) CheckAddress(address string) (bool, error) {
 
 // CheckCIDR checks if a given network is owned by AWS
 func (r *Ranges) CheckCIDR(cidr string) (bool, error) {
+	cidrFirstDigit := cidr[0]
 	for _, prefix := range r.Prefixes {
-		if cidr == prefix.IP {
+		if cidrFirstDigit != prefix.IP[0] {
+			return false, nil
+		}
+		if prefix.IP == cidr {
+			return true, nil
+		}
+		ip, _, _ := net.ParseCIDR(cidr)
+		_, prefixNetwork, _ := net.ParseCIDR(prefix.IP)
+		if prefixNetwork.Contains(ip) {
 			return true, nil
 		}
 	}
