@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/user"
 	"path"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -76,10 +77,11 @@ func (r *Ranges) CheckServices(address string) (*ServicesResponse, error) {
 	var answer Prefix
 	var services []string
 	var addressIP net.IP
+	var addressNet *net.IPNet
 	var parseIPError error
 
 	if strings.Contains(address, "/") {
-		addressIP, _, parseIPError = net.ParseCIDR(address)
+		addressIP, addressNet, parseIPError = net.ParseCIDR(address)
 		if parseIPError != nil {
 			return &ServicesResponse{}, parseIPError
 		}
@@ -91,6 +93,11 @@ func (r *Ranges) CheckServices(address string) (*ServicesResponse, error) {
 		_, prefixNetwork, parseIPError := net.ParseCIDR(prefix.IP)
 		if parseIPError != nil {
 			return &ServicesResponse{}, parseIPError
+		}
+		if addressNet != nil {
+			if !reflect.DeepEqual(prefixNetwork.Mask, addressNet.Mask) {
+				continue
+			}
 		}
 		if address == prefix.IP || prefixNetwork.Contains(addressIP) {
 			answer = prefix
