@@ -1,10 +1,8 @@
 package awsranges
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -35,11 +33,9 @@ type Ranges struct {
 
 // CheckAddress checks if a given address is owned by AWS
 func (r *Ranges) CheckAddress(address string) (bool, error) {
-	parsedAddr := net.ParseIP(address)
-
 	for _, prefix := range r.Prefixes {
 		_, network, _ := net.ParseCIDR(prefix.IP)
-		if network.Contains(parsedAddr) {
+		if network.Contains(net.ParseIP(address)) {
 			return true, nil
 		}
 	}
@@ -54,9 +50,11 @@ func (r *Ranges) CheckCIDR(cidr string) (bool, error) {
 		if cidrFirstDigit != prefix.IP[0] {
 			continue
 		}
+
 		if prefix.IP == cidr {
 			return true, nil
 		}
+
 		ip, _, _ := net.ParseCIDR(cidr)
 		_, prefixNetwork, _ := net.ParseCIDR(prefix.IP)
 		if prefixNetwork.Contains(ip) {
@@ -74,13 +72,11 @@ type ServicesResponse struct {
 
 // CheckServices determines what services and region an IP address is assigned to
 func (r *Ranges) CheckServices(address string) (*ServicesResponse, error) {
-	parsedAddr := net.ParseIP(address)
-
 	var answer Prefix
 	var services []string
 	for _, prefix := range r.Prefixes {
 		_, network, _ := net.ParseCIDR(prefix.IP)
-		if network.Contains(parsedAddr) {
+		if network.Contains(net.ParseIP(address)) {
 			answer = prefix
 			services = append(services, prefix.Service)
 		}
@@ -104,17 +100,13 @@ func (r *Ranges) CheckServices(address string) (*ServicesResponse, error) {
 
 // New returns a new instance of the Ranges object
 func New() (*Ranges, error) {
-	useCache := false
-
 	u, err := user.Current()
 	if err != nil {
 		return nil, err
 	}
 
 	cachedFile := path.Join(u.HomeDir, cacheFileName)
-	if fileExists(cachedFile) {
-		useCache = true
-	}
+	useCache := fileExists(cachedFile)
 
 	client := httpClient()
 	var ranges Ranges
@@ -137,13 +129,13 @@ func New() (*Ranges, error) {
 		if err != nil {
 			return nil, err
 		}
+		err = ioutil.WriteFile(cachedFile, data, 0644)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = json.Unmarshal(data, &ranges)
-	if err != nil {
-		return nil, err
-	}
-	err = writeToCache(data, cachedFile)
 	if err != nil {
 		return nil, err
 	}
@@ -186,18 +178,4 @@ func readFromCache(cacheFile string) ([]byte, error) {
 	defer fileReader.Close()
 
 	return ioutil.ReadAll(fileReader)
-}
-
-func writeToCache(data []byte, cacheFile string) error {
-	fileReader, err := os.Open(cacheFile)
-	if err != nil {
-		return fmt.Errorf("unable to open cached file: %+v", err)
-	}
-	defer fileReader.Close()
-
-	_, err = io.Copy(fileReader, bytes.NewBuffer(data))
-	if err != nil {
-		return fmt.Errorf("unable to copy contents to cached file: %+v", err)
-	}
-	return nil
 }
