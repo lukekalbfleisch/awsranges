@@ -139,7 +139,7 @@ func New() (*Ranges, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Printf("%+v\n", &ranges)
 	return &ranges, nil
 }
 
@@ -165,7 +165,6 @@ func httpClient() *http.Client {
 func fileExists(f string) bool {
 	_, err := os.Stat(f)
 	if os.IsNotExist(err) || err != nil {
-		fmt.Println(err)
 		return false
 	}
 	return true
