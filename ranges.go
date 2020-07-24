@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/user"
 	"path"
+	"strings"
 	"time"
 )
 
@@ -74,9 +75,24 @@ type ServicesResponse struct {
 func (r *Ranges) CheckServices(address string) (*ServicesResponse, error) {
 	var answer Prefix
 	var services []string
+	var addressIP net.IP
+	var parseIPError error
+
+	if strings.Contains(address, "/") {
+		addressIP, _, parseIPError = net.ParseCIDR(address)
+		if parseIPError != nil {
+			return &ServicesResponse{}, parseIPError
+		}
+	} else {
+		addressIP = net.ParseIP(address)
+	}
+
 	for _, prefix := range r.Prefixes {
-		_, network, _ := net.ParseCIDR(prefix.IP)
-		if network.Contains(net.ParseIP(address)) {
+		_, prefixNetwork, parseIPError := net.ParseCIDR(prefix.IP)
+		if parseIPError != nil {
+			return &ServicesResponse{}, parseIPError
+		}
+		if address == prefix.IP || prefixNetwork.Contains(addressIP) {
 			answer = prefix
 			services = append(services, prefix.Service)
 		}
