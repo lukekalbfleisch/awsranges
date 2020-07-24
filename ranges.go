@@ -1,14 +1,23 @@
 package awsranges
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
+	"os/user"
+	"path"
 	"time"
 )
 
-const url string = "https://ip-ranges.amazonaws.com/ip-ranges.json"
+const (
+	awsRangesURL  string = "https://ip-ranges.amazonaws.com/ip-ranges.json"
+	cacheFileName string = ".aws-ranges.json"
+)
 
 // Prefix is a representation of given IP prefix, region and service
 type Prefix struct {
@@ -21,7 +30,7 @@ type Prefix struct {
 // used to pull data down from AWS
 type Ranges struct {
 	Prefixes []Prefix
-	Client   http.Client
+	Client   *http.Client
 }
 
 // CheckAddress checks if a given address is owned by AWS
@@ -95,21 +104,46 @@ func (r *Ranges) CheckServices(address string) (*ServicesResponse, error) {
 
 // New returns a new instance of the Ranges object
 func New() (*Ranges, error) {
+	useCache := false
+
+	u, err := user.Current()
+	if err != nil {
+		return nil, err
+	}
+
+	cachedFile := path.Join(u.HomeDir, cacheFileName)
+	if fileExists(cachedFile) {
+		useCache = true
+	}
+
 	client := httpClient()
-
-	res, err := client.Get(url)
-	if err != nil {
-		return nil, err
-	}
-
-	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-
 	var ranges Ranges
-	err = json.Unmarshal(body, &ranges)
+	ranges.Client = client
+
+	var data []byte
+	if useCache {
+		data, err = readFromCache(cachedFile)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		res, err := ranges.Client.Get(awsRangesURL)
+		if err != nil {
+			return nil, err
+		}
+		defer res.Body.Close()
+
+		data, err = ioutil.ReadAll(res.Body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err = json.Unmarshal(data, &ranges)
+	if err != nil {
+		return nil, err
+	}
+	err = writeToCache(data, cachedFile)
 	if err != nil {
 		return nil, err
 	}
@@ -134,4 +168,36 @@ func httpClient() *http.Client {
 			DisableKeepAlives:     true,
 		},
 	}
+}
+
+func fileExists(f string) bool {
+	_, err := os.Stat(f)
+	if os.IsNotExist(err) || err != nil {
+		return false
+	}
+	return true
+}
+
+func readFromCache(cacheFile string) ([]byte, error) {
+	fileReader, err := os.Open(cacheFile)
+	if err != nil {
+		return nil, fmt.Errorf("unable to open cached file: %+v", err)
+	}
+	defer fileReader.Close()
+
+	return ioutil.ReadAll(fileReader)
+}
+
+func writeToCache(data []byte, cacheFile string) error {
+	fileReader, err := os.Open(cacheFile)
+	if err != nil {
+		return fmt.Errorf("unable to open cached file: %+v", err)
+	}
+	defer fileReader.Close()
+
+	_, err = io.Copy(fileReader, bytes.NewBuffer(data))
+	if err != nil {
+		return fmt.Errorf("unable to copy contents to cached file: %+v", err)
+	}
+	return nil
 }
