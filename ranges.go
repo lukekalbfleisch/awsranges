@@ -155,7 +155,6 @@ func New() (*Ranges, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("%+v\n", &ranges)
 	return &ranges, nil
 }
 
